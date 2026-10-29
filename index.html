@@ -48,10 +48,9 @@ nav a:hover{color:#f1c40f}
 .btn-red:hover{background:#c0392b}
 .btn-gray{background:#95a5a6;color:#fff}
 .btn-gray:hover{background:#7f8c8d}
-.btn-whatsapp{background:#25D366;color:#fff}
-.btn-whatsapp:hover{background:#1da851}
-.btn-bale{background:#1a73e8;color:#fff}
-.btn-bale:hover{background:#1557b0}
+.btn-purple{background:#9b59b6;color:#fff}
+.btn-purple:hover{background:#8e44ad}
+.order-btn{padding:12px 25px;font-size:15px;margin:5px 5px 5px 0}
 .btns-group{display:flex;gap:12px;flex-wrap:wrap;margin:15px 0}
 .tracking-box{background:#f8f9fa;padding:20px;border-radius:12px;margin:20px 0;text-align:center;border:2px dashed #3498db}
 .tracking-box strong{font-size:26px;color:#1a2332;letter-spacing:1px;direction:ltr;display:inline-block}
@@ -146,11 +145,11 @@ nav a:hover{color:#f1c40f}
 <h2>🛒 سبد خرید</h2>
 <div id="cart-items"></div>
 <div class="cart-total">جمع کل: <span id="cart-total-price">۰</span> تومان</div>
-<div class="btns-group">
-<button class="btn btn-whatsapp" onclick="sendToWhatsApp()">📱 ثبت سفارش در واتساپ</button>
-<button class="btn btn-bale" onclick="sendToBale()">📱 ثبت سفارش در بله</button>
-<button class="btn btn-red" onclick="clearCart()">🗑️ خالی کردن سبد</button>
+<h3 style="margin:15px 0 10px">📱 ثبت سفارش از طریق:</h3>
+<div class="btns-group" id="order-channels">
+<!-- دکمه‌ها اینجا ساخته میشن -->
 </div>
+<button class="btn btn-red" onclick="clearCart()" style="margin-top:10px">🗑️ خالی کردن سبد</button>
 <div id="order-result"></div>
 </div>
 </div>
@@ -162,6 +161,7 @@ nav a:hover{color:#f1c40f}
 <button class="active" onclick="adminTab('products')">📦 مدیریت محصولات</button>
 <button onclick="adminTab('settings')">⚙️ تنظیمات سایت</button>
 <button onclick="adminTab('orders')">📋 ثبت سفارش جدید</button>
+<button onclick="adminTab('channels')">📱 ثبت سفارش (درگاه‌ها)</button>
 <button onclick="adminTab('support')">📞 پشتیبانی</button>
 <button onclick="adminTab('info')">ℹ️ توضیحات سایت</button>
 </div>
@@ -206,6 +206,33 @@ nav a:hover{color:#f1c40f}
 <button class="btn btn-green" onclick="addManualOrder()">✅ ثبت سفارش</button>
 <h3 style="margin-top:30px">📋 همه سفارشات</h3>
 <div id="all-orders-list"></div>
+</div>
+
+<!-- ================== تب جدید: درگاه‌های ثبت سفارش ================== -->
+<div class="admin-content" id="admin-channels">
+<h3>📱 مدیریت درگاه‌های ثبت سفارش</h3>
+<p style="color:#666;font-size:14px;margin-bottom:15px">اینجا می‌تونی آیدی بله، واتساپ، اینستاگرام، تلگرام و... رو اضافه کنی. مشتری‌ها توی سبد خرید، دکمه‌های این درگاه‌ها رو می‌بینن و با زدنشون متن سفارش به اون آیدی ارسال میشه.</p>
+<div class="form-row">
+<div class="form-group">
+<label>نام برنامه</label>
+<select id="channel-app">
+<option value="bale">بله (Bale)</option>
+<option value="whatsapp">واتساپ (WhatsApp)</option>
+<option value="telegram">تلگرام (Telegram)</option>
+<option value="instagram">اینستاگرام (Instagram)</option>
+<option value="eitaa">ایتا (Eitaa)</option>
+<option value="rubika">روبیکا (Rubika)</option>
+<option value="other">سایر</option>
+</select>
+</div>
+<div class="form-group">
+<label>آیدی یا لینک</label>
+<input id="channel-id" placeholder="مثال: @mory_stock یا 989123456789">
+</div>
+</div>
+<button class="btn btn-blue" onclick="addChannel()">➕ افزودن درگاه</button>
+<h3 style="margin-top:30px">📋 لیست درگاه‌های فعال</h3>
+<div id="admin-channels-list"></div>
 </div>
 
 <div class="admin-content" id="admin-support">
@@ -255,6 +282,7 @@ let isAdminLoggedIn = false;
 let products = [];
 let cart = [];
 let orders = [];
+let channels = []; // درگاه‌های ثبت سفارش
 let slideIndex = 0;
 let supportData = {whatsapp:'989123456789',bale:'@mory_stock',phone:'۰۲۱-۱۲۳۴۵۶۷۸',hours:'۹ الی ۱۸'};
 let settings = {slide1:'🔥 تخفیف ویژه تابستانه',slide2:'👗 مجموعه جدید پاییزه',slide3:'🚚 ارسال رایگان',shopName:'موری استوک'};
@@ -341,6 +369,7 @@ renderAdminProducts();
 renderOrdersList();
 renderSupportInfo();
 renderSiteInfo();
+renderAdminChannels();
 }else{
 document.getElementById('loginOverlay').style.display = 'flex';
 document.getElementById('loginPass').value = '';
@@ -406,11 +435,15 @@ document.getElementById('cart-count').textContent = cart.reduce((sum,c) => sum +
 
 function renderCart(){
 const container = document.getElementById('cart-items');
+const channelsContainer = document.getElementById('order-channels');
+
 if(cart.length === 0){
 container.innerHTML = '<div class="empty-msg">🛒 سبد خرید خالی است</div>';
 document.getElementById('cart-total-price').textContent = '۰';
+channelsContainer.innerHTML = '<div class="empty-msg" style="font-size:14px">برای ثبت سفارش، ابتدا محصولی به سبد اضافه کنید</div>';
 return;
 }
+
 container.innerHTML = cart.map(c => `
 <div class="cart-item">
 <span class="item-name">${c.name} (×${c.qty})</span>
@@ -418,50 +451,117 @@ container.innerHTML = cart.map(c => `
 <button class="btn btn-red" style="padding:5px 15px;font-size:13px" onclick="removeFromCart(${c.id})">✖</button>
 </div>
 `).join('');
+
 const total = cart.reduce((s,c) => s + c.price*c.qty, 0);
 document.getElementById('cart-total-price').textContent = total.toLocaleString();
+
+// ساخت دکمه‌های درگاه سفارش
+if(channels.length === 0){
+channelsContainer.innerHTML = '<div class="empty-msg" style="font-size:14px">⚠️ هنوز هیچ درگاهی توی پنل مدیریت اضافه نشده است</div>';
+}else{
+channelsContainer.innerHTML = channels.map((ch, idx) => {
+const appName = getAppName(ch.app);
+return `<button class="btn order-btn" style="background:${ch.color||'#3498db'};color:#fff" onclick="sendOrderToChannel(${idx})">${appName} : ${ch.id}</button>`;
+}).join('');
+}
 }
 
-function clearCart(){
-if(cart.length === 0){ showToast('سبد خرید خالی است'); return; }
-if(!confirm('آیا مطمئنید سبد خرید خالی شود؟')) return;
-cart = []; renderCart(); updateCartCount(); showToast('🗑️ سبد خرید خالی شد');
+// ========== نام و رنگ برنامه‌ها ==========
+function getAppName(app){
+const names = {
+bale: '🟢 بله',
+whatsapp: '🟩 واتساپ',
+telegram: '🔵 تلگرام',
+instagram: '🟣 اینستاگرام',
+eitaa: '🟠 ایتا',
+rubika: '🟡 روبیکا',
+other: '📱 سایر'
+};
+return names[app] || app;
 }
 
-// ========== ثبت سفارش در واتساپ ==========
-function sendToWhatsApp(){
-if(cart.length === 0){ showToast('⚠️ سبد خرید خالی است'); return; }
+function getAppColor(app){
+const colors = {
+bale: '#1a73e8',
+whatsapp: '#25D366',
+telegram: '#0088cc',
+instagram: '#C13584',
+eitaa: '#f39c12',
+rubika: '#f1c40f',
+other: '#3498db'
+};
+return colors[app] || '#3498db';
+}
+
+// ========== ساخت متن سفارش ==========
+function buildOrderMessage(){
 const total = cart.reduce((s,c) => s + c.price*c.qty, 0);
-const items = cart.map(c => `${c.name} (×${c.qty}) - ${(c.price*c.qty).toLocaleString()} تومان`).join('\n');
+const items = cart.map(c => `• ${c.name} (×${c.qty}) - ${(c.price*c.qty).toLocaleString()} تومان`).join('\n');
 const tracking = generateTrackingCode();
-const phone = supportData.whatsapp || '989123456789';
-const message = encodeURIComponent(
-`🛒 *سفارش جدید از موری استوک*\n\n` +
+const msg = `🛒 *سفارش جدید از موری استوک*\n\n` +
 `📋 *محصولات:*\n${items}\n\n` +
 `💰 *جمع کل:* ${total.toLocaleString()} تومان\n` +
 `🎫 *کد پیگیری:* ${tracking}\n\n` +
-`👤 نام: \n📞 موبایل: \n📍 آدرس: \n\n🙏 سپاس از انتخاب شما`
-);
-window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
-showToast('📱 در حال انتقال به واتساپ...');
+`👤 نام: \n📞 موبایل: \n📍 آدرس: \n\n🙏 سپاس از انتخاب شما`;
+return {msg, tracking};
 }
 
-// ========== ثبت سفارش در بله ==========
-function sendToBale(){
-if(cart.length === 0){ showToast('⚠️ سبد خرید خالی است'); return; }
-const total = cart.reduce((s,c) => s + c.price*c.qty, 0);
-const items = cart.map(c => `${c.name} (×${c.qty}) - ${(c.price*c.qty).toLocaleString()} تومان`).join('\n');
-const tracking = generateTrackingCode();
-const baleId = supportData.bale || '@mory_stock';
-const message = encodeURIComponent(
-`🛒 سفارش جدید از موری استوک\n\n` +
-`📋 محصولات:\n${items}\n\n` +
-`💰 جمع کل: ${total.toLocaleString()} تومان\n` +
-`🎫 کد پیگیری: ${tracking}\n\n` +
-`👤 نام: \n📞 موبایل: \n📍 آدرس: \n\n🙏 سپاس از انتخاب شما`
-);
-window.open(`https://bale.ai/${baleId}?text=${message}`, '_blank');
-showToast('📱 در حال انتقال به بله...');
+// ========== ارسال سفارش به درگاه ==========
+function sendOrderToChannel(idx){
+const ch = channels[idx];
+if(!ch) return;
+const {msg, tracking} = buildOrderMessage();
+const encodedMsg = encodeURIComponent(msg);
+
+// کپی متن سفارش در کلیپ‌بورد برای همه
+navigator.clipboard.writeText(msg).catch(()=>{});
+
+let url = '';
+const cleanId = ch.id.replace('@', '').trim();
+
+if(ch.app === 'whatsapp'){
+const phone = ch.id.replace(/[^0-9]/g, '');
+url = `https://wa.me/${phone}?text=${encodedMsg}`;
+}
+else if(ch.app === 'bale'){
+const baleId = ch.id.startsWith('@') ? ch.id : '@' + ch.id;
+url = `https://bale.ai/${baleId}`;
+showToast('📋 متن سفارش کپی شد. توی بله پیست کن و بفرست.');
+}
+else if(ch.app === 'telegram'){
+url = `https://t.me/${cleanId}`;
+showToast('📋 متن سفارش کپی شد. توی تلگرام پیست کن و بفرست.');
+}
+else if(ch.app === 'instagram'){
+url = `https://instagram.com/${cleanId}`;
+showToast('📋 متن سفارش کپی شد. توی دایرکت اینستاگرام پیست کن.');
+}
+else if(ch.app === 'eitaa'){
+url = `https://eitaa.com/${cleanId}`;
+showToast('📋 متن سفارش کپی شد. توی ایتا پیست کن.');
+}
+else if(ch.app === 'rubika'){
+url = `https://rubika.ir/${cleanId}`;
+showToast('📋 متن سفارش کپی شد. توی روبیکا پیست کن.');
+}
+else {
+url = ch.id.startsWith('http') ? ch.id : 'https://' + ch.id;
+showToast('📋 متن سفارش کپی شد.');
+}
+
+if(url) window.open(url, '_blank');
+
+// نمایش کد پیگیری
+const resultDiv = document.getElementById('order-result');
+resultDiv.innerHTML = `
+<div class="tracking-box">
+<span class="label">🎫 کد پیگیری سفارش شما</span>
+<strong>${tracking}</strong>
+<p style="margin-top:12px;color:#555;font-size:14px">📋 متن سفارش در کلیپ‌بورد کپی شد</p>
+<p style="font-size:13px;color:#888">اگه پیام آماده نشد، دستی توی ${getAppName(ch.app)} پیست کن</p>
+</div>
+<button class="btn btn-blue" onclick="document.getElementById('order-result').innerHTML=''">بستن</button>
+`;
 }
 
 // ========== کد پیگیری ==========
@@ -474,7 +574,7 @@ const rand = String(Math.floor(Math.random()*1000)).padStart(3,'0');
 return `LCI-${y}${m}${d}-${rand}`;
 }
 
-// ========== افزودن محصول به Supabase ==========
+// ========== مدیریت محصولات ==========
 async function addProduct(){
 const name = document.getElementById('prod-name').value.trim();
 const price = parseInt(document.getElementById('prod-price').value);
@@ -499,13 +599,11 @@ free_shipping: freeShipping
 if(error) throw error;
 
 showToast('✅ محصول با موفقیت به دیتابیس اضافه شد');
-
 document.getElementById('prod-name').value = '';
 document.getElementById('prod-price').value = '';
 document.getElementById('prod-image').value = '';
 document.getElementById('prod-desc').value = '';
 document.getElementById('image-preview').innerHTML = '';
-
 await loadProducts();
 }catch(error){
 console.error('خطا:', error);
@@ -513,17 +611,11 @@ showToast('❌ خطا در افزودن محصول: ' + error.message);
 }
 }
 
-// ========== حذف محصول از Supabase ==========
 async function deleteProduct(id){
 if(!confirm('حذف محصول؟')) return;
 try{
-const { error } = await supabaseClient
-.from('products')
-.delete()
-.eq('id', id);
-
+const { error } = await supabaseClient.from('products').delete().eq('id', id);
 if(error) throw error;
-
 showToast('✅ محصول حذف شد');
 await loadProducts();
 }catch(error){
@@ -546,6 +638,49 @@ container.innerHTML = products.map(p => `
 ${p.freeShipping ? '<span style="background:#f1c40f;padding:2px 10px;border-radius:12px;font-size:11px">🚚 رایگان</span>' : ''}
 </div>
 <span><span style="color:#888;font-size:13px">${p.desc||''}</span> <span class="del" onclick="deleteProduct(${p.id})">✖</span></span>
+</div>
+`).join('');
+}
+
+// ========== مدیریت درگاه‌های سفارش ==========
+function addChannel(){
+const app = document.getElementById('channel-app').value;
+const id = document.getElementById('channel-id').value.trim();
+if(!id){ showToast('⚠️ آیدی یا لینک را وارد کنید'); return; }
+
+channels.push({
+app: app,
+id: id,
+color: getAppColor(app)
+});
+
+localStorage.setItem('mory_channels', JSON.stringify(channels));
+document.getElementById('channel-id').value = '';
+renderAdminChannels();
+showToast('✅ درگاه اضافه شد');
+}
+
+function deleteChannel(idx){
+if(!confirm('حذف درگاه؟')) return;
+channels.splice(idx, 1);
+localStorage.setItem('mory_channels', JSON.stringify(channels));
+renderAdminChannels();
+showToast('🗑️ درگاه حذف شد');
+}
+
+function renderAdminChannels(){
+const container = document.getElementById('admin-channels-list');
+if(channels.length === 0){
+container.innerHTML = '<div class="empty-msg">هیچ درگاهی اضافه نشده</div>';
+return;
+}
+container.innerHTML = channels.map((ch, idx) => `
+<div class="list-item">
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+<span style="background:${ch.color};color:#fff;padding:4px 12px;border-radius:15px;font-size:13px">${getAppName(ch.app)}</span>
+<strong style="direction:ltr">${ch.id}</strong>
+</div>
+<span class="del" onclick="deleteChannel(${idx})">✖</span>
 </div>
 `).join('');
 }
@@ -720,6 +855,8 @@ const st = localStorage.getItem('mory_settings');
 if(st){ settings = JSON.parse(st); }
 const si = localStorage.getItem('mory_siteinfo');
 if(si){ siteInfo = JSON.parse(si); }
+const ch = localStorage.getItem('mory_channels');
+if(ch){ channels = JSON.parse(ch); }
 }
 
 // ========== توست ==========
@@ -738,6 +875,7 @@ await loadProducts();
 updateCartCount();
 renderSupportInfo();
 renderSiteInfo();
+renderAdminChannels();
 const slides = document.querySelectorAll('.slide');
 if(slides.length >= 3){
 slides[0].querySelector('h2').textContent = settings.slide1;
