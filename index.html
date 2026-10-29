@@ -98,6 +98,7 @@ nav a:hover{color:#f1c40f}
 .loading-msg{text-align:center;padding:30px;color:#888;font-size:18px}
 @media(max-width:768px){header{flex-direction:column;gap:12px;text-align:center}header h1{font-size:20px}nav a{margin:0 8px;font-size:14px}.hero{padding:30px 15px;min-height:140px}.slide h2{font-size:24px}.slide p{font-size:17px}.hero button{font-size:20px;padding:5px 12px}.form-row{grid-template-columns:1fr}.product-grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}.admin-tabs button{padding:8px 14px;font-size:13px}.login-box{padding:25px}}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -112,7 +113,6 @@ nav a:hover{color:#f1c40f}
 </div>
 
 <div class="container">
-
 <header>
 <h1>👕 <span>موری</span> استوک</h1>
 <nav>
@@ -158,9 +158,6 @@ nav a:hover{color:#f1c40f}
 <div id="page-admin" class="hidden">
 <div class="admin-panel">
 <h2 style="margin-bottom:20px">⚙️ پنل مدیریت</h2>
-<div style="background:#fff3cd;padding:15px;border-radius:8px;margin-bottom:20px;border-right:4px solid #f39c12;font-size:14px">
-<strong>⚠️ توجه مهم:</strong> محصولات از فایل <code>products.json</code> توی گیت‌هاب خونده میشن. برای اضافه کردن محصول جدید که توی همه گوشی‌ها دیده بشه، باید فایل <code>products.json</code> رو توی گیت‌هاب ویرایش کنی. دکمه زیر بهت کمک میکنه کد JSON رو کپی کنی.
-</div>
 <div class="admin-tabs">
 <button class="active" onclick="adminTab('products')">📦 مدیریت محصولات</button>
 <button onclick="adminTab('settings')">⚙️ تنظیمات سایت</button>
@@ -184,10 +181,8 @@ nav a:hover{color:#f1c40f}
 <div class="form-group"><label>ارسال رایگان</label>
 <select id="prod-free"><option value="no">خیر</option><option value="yes">بله</option></select>
 </div>
-<button class="btn btn-blue" onclick="addProductLocal()">➕ افزودن به لیست موقت</button>
-<button class="btn btn-green" onclick="showJsonForGithub()">📋 نمایش JSON برای کپی در گیت‌هاب</button>
-<div id="json-output" style="margin-top:20px"></div>
-<h3 style="margin-top:30px">📋 لیست محصولات فعلی</h3>
+<button class="btn btn-blue" onclick="addProduct()">➕ افزودن محصول به دیتابیس</button>
+<h3 style="margin-top:30px">📋 لیست محصولات (از دیتابیس)</h3>
 <div id="admin-product-list"></div>
 </div>
 
@@ -197,7 +192,7 @@ nav a:hover{color:#f1c40f}
 <div class="form-group"><label>متن اسلایدر دوم</label><input id="slide-text2" value="👗 مجموعه جدید پاییزه"></div>
 <div class="form-group"><label>متن اسلایدر سوم</label><input id="slide-text3" value="🚚 ارسال رایگان"></div>
 <div class="form-group"><label>نام فروشگاه</label><input id="shop-name" value="موری استوک"></div>
-<button class="btn btn-blue" onclick="saveSettings()">💾 ذخیره تنظیمات</button>
+<button class="btn btn-blue" onclick="saveSettings()">💾 ذخیره تنظیمات (محلی)</button>
 </div>
 
 <div class="admin-content" id="admin-orders">
@@ -241,155 +236,143 @@ nav a:hover{color:#f1c40f}
 
 </div>
 </div>
-
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
+// ========== اتصال به Supabase ==========
+const SUPABASE_URL = 'https://leaykyptiedutwsdevxv.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_bVWgul56b1tnPoITmq1nkA_KJsvFjcn';
+
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 // ========== کد امنیتی پنل مدیریت ==========
 const ADMIN_PASS = '3129';
 let isAdminLoggedIn = false;
 
-// ========== آدرس فایل JSON در گیت‌هاب ==========
-// ⚠️ این آدرس رو با آدرس ریپازیتوری خودت جایگزین کن
-const PRODUCTS_URL = 'products.json';
-
-// ========== داده‌های اولیه ==========
+// ========== داده‌های محلی ==========
 let products = [];
-let tempProducts = []; // لیست موقت برای محصولات اضافه شده در پنل
 let cart = [];
 let orders = [];
 let slideIndex = 0;
 let supportData = {whatsapp:'989123456789',bale:'@mory_stock',phone:'۰۲۱-۱۲۳۴۵۶۷۸',hours:'۹ الی ۱۸'};
 let settings = {slide1:'🔥 تخفیف ویژه تابستانه',slide2:'👗 مجموعه جدید پاییزه',slide3:'🚚 ارسال رایگان',shopName:'موری استوک'};
 let siteInfo = {description:'فروشگاه موری استوک مرجع تخصصی خرید لباس‌های باکیفیت و شیک',rules:'۱- امکان مرجوعی تا ۷ روز\n۲- ارسال رایگان برای سفارشات بالای ۵۰۰ هزار تومان\n۳- پرداخت در محل'};
-let nextProductId = 7;
 let nextOrderId = 1;
 
-// ========== بارگذاری محصولات از JSON ==========
-async function loadProductsFromJSON(){
-    try{
-        const response = await fetch(PRODUCTS_URL + '?t=' + Date.now()); // جلوگیری از کش
-        if(!response.ok) throw new Error('HTTP error');
-        const data = await response.json();
-        products = data;
-        // اضافه کردن محصولات موقت (localStorage)
-        const localProducts = localStorage.getItem('mory_temp_products');
-        if(localProducts){
-            tempProducts = JSON.parse(localProducts);
-            products = products.concat(tempProducts);
-        }
-        nextProductId = Math.max(...products.map(p=>p.id), 0) + 1;
-        renderAllProducts();
-        showToast('✅ محصولات از سرور بارگذاری شد');
-    }catch(error){
-        console.error('خطا در بارگذاری محصولات:', error);
-        // اگه JSON لود نشد، از localStorage استفاده کن
-        const localProducts = localStorage.getItem('mory_products');
-        if(localProducts){
-            products = JSON.parse(localProducts);
-            nextProductId = Math.max(...products.map(p=>p.id), 0) + 1;
-        }
-        const tempP = localStorage.getItem('mory_temp_products');
-        if(tempP){
-            tempProducts = JSON.parse(tempP);
-            products = products.concat(tempProducts);
-        }
-        renderAllProducts();
-        showToast('⚠️ محصولات از حافظه محلی بارگذاری شد');
-    }
-}
+// ========== بارگذاری محصولات از Supabase ==========
+async function loadProducts(){
+try{
+const { data, error } = await supabaseClient
+.from('products')
+.select('*')
+.order('created_at', { ascending: true });
 
-function renderAllProducts(){
-    renderProducts('featured-products', products);
-    renderProducts('all-products', products);
-    if(isAdminLoggedIn) renderAdminProducts();
+if(error) throw error;
+
+products = data.map(p => ({
+id: p.id,
+name: p.name,
+price: p.price,
+image: p.image,
+desc: p.description,
+freeShipping: p.free_shipping
+}));
+
+renderProducts('featured-products', products);
+renderProducts('all-products', products);
+if(isAdminLoggedIn) renderAdminProducts();
+showToast('✅ محصولات از دیتابیس بارگذاری شد');
+}catch(error){
+console.error('خطا در بارگذاری:', error);
+showToast('❌ خطا در بارگذاری محصولات: ' + error.message);
+}
 }
 
 // ========== لاگین ==========
 function loginAdmin(){
-    const pass = document.getElementById('loginPass').value.trim();
-    if(pass === ADMIN_PASS){
-        isAdminLoggedIn = true;
-        document.getElementById('loginOverlay').style.display = 'none';
-        document.getElementById('logoutLink').style.display = 'inline';
-        document.getElementById('loginError').style.display = 'none';
-        document.getElementById('loginPass').value = '';
-        showToast('✅ ورود موفق به پنل مدیریت');
-        showPage('admin');
-    }else{
-        document.getElementById('loginError').style.display = 'block';
-        document.getElementById('loginPass').value = '';
-        document.getElementById('loginPass').focus();
-    }
+const pass = document.getElementById('loginPass').value.trim();
+if(pass === ADMIN_PASS){
+isAdminLoggedIn = true;
+document.getElementById('loginOverlay').style.display = 'none';
+document.getElementById('logoutLink').style.display = 'inline';
+document.getElementById('loginError').style.display = 'none';
+document.getElementById('loginPass').value = '';
+showToast('✅ ورود موفق به پنل مدیریت');
+showPage('admin');
+}else{
+document.getElementById('loginError').style.display = 'block';
+document.getElementById('loginPass').value = '';
+document.getElementById('loginPass').focus();
+}
 }
 
 document.getElementById('loginPass').addEventListener('keydown', function(e){
-    if(e.key === 'Enter'){ loginAdmin(); }
+if(e.key === 'Enter'){ loginAdmin(); }
 });
 
 function logoutAdmin(){
-    isAdminLoggedIn = false;
-    document.getElementById('logoutLink').style.display = 'none';
-    document.getElementById('loginOverlay').style.display = 'none';
-    showToast('🚪 از پنل مدیریت خارج شدید');
-    showPage('home');
+isAdminLoggedIn = false;
+document.getElementById('logoutLink').style.display = 'none';
+document.getElementById('loginOverlay').style.display = 'none';
+showToast('🚪 از پنل مدیریت خارج شدید');
+showPage('home');
 }
 
 // ========== پیش‌نمایش عکس ==========
 function previewImage(){
-    const url = document.getElementById('prod-image').value.trim();
-    const preview = document.getElementById('image-preview');
-    if(url){
-        preview.innerHTML = `<img src="${url}" alt="پیش‌نمایش" onerror="this.parentElement.innerHTML='<p style=\\'color:red;font-size:13px\\'>❌ لینک تصویر معتبر نیست</p>'">`;
-    }else{
-        preview.innerHTML = '';
-    }
+const url = document.getElementById('prod-image').value.trim();
+const preview = document.getElementById('image-preview');
+if(url){
+preview.innerHTML = `<img src="${url}" alt="پیش‌نمایش" onerror="this.parentElement.innerHTML='<p style=\\'color:red;font-size:13px\\'>❌ لینک تصویر معتبر نیست</p>'">`;
+}else{
+preview.innerHTML = '';
+}
 }
 
 // ========== نمایش صفحات ==========
 function showPage(page){
-    if(page === 'admin'){
-        if(isAdminLoggedIn){
-            document.querySelectorAll('[id^="page-"]').forEach(el => el.classList.add('hidden'));
-            document.getElementById('page-admin').classList.remove('hidden');
-            renderAdminProducts();
-            renderOrdersList();
-            renderSupportInfo();
-            renderSiteInfo();
-        }else{
-            document.getElementById('loginOverlay').style.display = 'flex';
-            document.getElementById('loginPass').value = '';
-            document.getElementById('loginError').style.display = 'none';
-            document.getElementById('loginPass').focus();
-        }
-        return;
-    }
-    document.querySelectorAll('[id^="page-"]').forEach(el => el.classList.add('hidden'));
-    document.getElementById('page-' + page).classList.remove('hidden');
-    if(page === 'cart') renderCart();
-    if(page === 'products') renderProducts('all-products', products);
+if(page === 'admin'){
+if(isAdminLoggedIn){
+document.querySelectorAll('[id^="page-"]').forEach(el => el.classList.add('hidden'));
+document.getElementById('page-admin').classList.remove('hidden');
+renderAdminProducts();
+renderOrdersList();
+renderSupportInfo();
+renderSiteInfo();
+}else{
+document.getElementById('loginOverlay').style.display = 'flex';
+document.getElementById('loginPass').value = '';
+document.getElementById('loginError').style.display = 'none';
+document.getElementById('loginPass').focus();
+}
+return;
+}
+document.querySelectorAll('[id^="page-"]').forEach(el => el.classList.add('hidden'));
+document.getElementById('page-' + page).classList.remove('hidden');
+if(page === 'cart') renderCart();
+if(page === 'products') renderProducts('all-products', products);
 }
 
 // ========== اسلایدر ==========
 function changeSlide(dir){
-    let slides = document.querySelectorAll('.slide');
-    slides[slideIndex].classList.remove('active');
-    slideIndex = (slideIndex + dir + slides.length) % slides.length;
-    slides[slideIndex].classList.add('active');
+let slides = document.querySelectorAll('.slide');
+slides[slideIndex].classList.remove('active');
+slideIndex = (slideIndex + dir + slides.length) % slides.length;
+slides[slideIndex].classList.add('active');
 }
 setInterval(() => changeSlide(1), 4000);
 
 // ========== رندر محصولات ==========
 function renderProducts(containerId, productList){
-    const container = document.getElementById(containerId);
-    if(!container) return;
-    if(productList.length === 0){
-        container.innerHTML = '<div class="empty-msg">هیچ محصولی موجود نیست</div>';
-        return;
-    }
-    container.innerHTML = productList.map(p => `
+const container = document.getElementById(containerId);
+if(!container) return;
+if(productList.length === 0){
+container.innerHTML = '<div class="empty-msg">هیچ محصولی موجود نیست</div>';
+return;
+}
+container.innerHTML = productList.map(p => `
 <div class="product-card">
 <img src="${p.image}" alt="${p.name}" onerror="this.src='https://via.placeholder.com/300x300/ccc/fff?text=No+Image'">
 <h3>${p.name}</h3>
@@ -403,257 +386,215 @@ ${p.freeShipping ? '<span class="free-badge">🚚 ارسال رایگان</span>
 
 // ========== سبد خرید ==========
 function addToCart(productId){
-    const product = products.find(p => p.id === productId);
-    if(!product) return;
-    const exist = cart.find(c => c.id === productId);
-    if(exist){ exist.qty += 1; }else{ cart.push({...product, qty:1}); }
-    updateCartCount();
-    showToast('✅ ' + product.name + ' به سبد خرید اضافه شد');
+const product = products.find(p => p.id === productId);
+if(!product) return;
+const exist = cart.find(c => c.id === productId);
+if(exist){ exist.qty += 1; }else{ cart.push({...product, qty:1}); }
+updateCartCount();
+showToast('✅ ' + product.name + ' به سبد خرید اضافه شد');
 }
 
 function removeFromCart(productId){
-    cart = cart.filter(c => c.id !== productId);
-    renderCart();
-    updateCartCount();
+cart = cart.filter(c => c.id !== productId);
+renderCart();
+updateCartCount();
 }
 
 function updateCartCount(){
-    document.getElementById('cart-count').textContent = cart.reduce((sum,c) => sum + c.qty, 0);
+document.getElementById('cart-count').textContent = cart.reduce((sum,c) => sum + c.qty, 0);
 }
 
 function renderCart(){
-    const container = document.getElementById('cart-items');
-    if(cart.length === 0){
-        container.innerHTML = '<div class="empty-msg">🛒 سبد خرید خالی است</div>';
-        document.getElementById('cart-total-price').textContent = '۰';
-        return;
-    }
-    container.innerHTML = cart.map(c => `
+const container = document.getElementById('cart-items');
+if(cart.length === 0){
+container.innerHTML = '<div class="empty-msg">🛒 سبد خرید خالی است</div>';
+document.getElementById('cart-total-price').textContent = '۰';
+return;
+}
+container.innerHTML = cart.map(c => `
 <div class="cart-item">
 <span class="item-name">${c.name} (×${c.qty})</span>
 <span class="item-price">${(c.price*c.qty).toLocaleString()} تومان</span>
 <button class="btn btn-red" style="padding:5px 15px;font-size:13px" onclick="removeFromCart(${c.id})">✖</button>
 </div>
 `).join('');
-    const total = cart.reduce((s,c) => s + c.price*c.qty, 0);
-    document.getElementById('cart-total-price').textContent = total.toLocaleString();
+const total = cart.reduce((s,c) => s + c.price*c.qty, 0);
+document.getElementById('cart-total-price').textContent = total.toLocaleString();
 }
 
 function clearCart(){
-    if(cart.length === 0){ showToast('سبد خرید خالی است'); return; }
-    if(!confirm('آیا مطمئنید سبد خرید خالی شود؟')) return;
-    cart = []; renderCart(); updateCartCount(); showToast('🗑️ سبد خرید خالی شد');
+if(cart.length === 0){ showToast('سبد خرید خالی است'); return; }
+if(!confirm('آیا مطمئنید سبد خرید خالی شود؟')) return;
+cart = []; renderCart(); updateCartCount(); showToast('🗑️ سبد خرید خالی شد');
 }
 
 // ========== ثبت سفارش در واتساپ ==========
 function sendToWhatsApp(){
-    if(cart.length === 0){ showToast('⚠️ سبد خرید خالی است'); return; }
-    const total = cart.reduce((s,c) => s + c.price*c.qty, 0);
-    const items = cart.map(c => `${c.name} (×${c.qty}) - ${(c.price*c.qty).toLocaleString()} تومان`).join('\n');
-    const tracking = generateTrackingCode();
-    const phone = supportData.whatsapp || '989123456789';
-    const message = encodeURIComponent(
-        `🛒 *سفارش جدید از موری استوک*\n\n` +
-        `📋 *محصولات:*\n${items}\n\n` +
-        `💰 *جمع کل:* ${total.toLocaleString()} تومان\n` +
-        `🎫 *کد پیگیری:* ${tracking}\n\n` +
-        `👤 نام: \n📞 موبایل: \n📍 آدرس: \n\n🙏 سپاس از انتخاب شما`
-    );
-    window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
-    showToast('📱 در حال انتقال به واتساپ...');
+if(cart.length === 0){ showToast('⚠️ سبد خرید خالی است'); return; }
+const total = cart.reduce((s,c) => s + c.price*c.qty, 0);
+const items = cart.map(c => `${c.name} (×${c.qty}) - ${(c.price*c.qty).toLocaleString()} تومان`).join('\n');
+const tracking = generateTrackingCode();
+const phone = supportData.whatsapp || '989123456789';
+const message = encodeURIComponent(
+`🛒 *سفارش جدید از موری استوک*\n\n` +
+`📋 *محصولات:*\n${items}\n\n` +
+`💰 *جمع کل:* ${total.toLocaleString()} تومان\n` +
+`🎫 *کد پیگیری:* ${tracking}\n\n` +
+`👤 نام: \n📞 موبایل: \n📍 آدرس: \n\n🙏 سپاس از انتخاب شما`
+);
+window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+showToast('📱 در حال انتقال به واتساپ...');
 }
 
 // ========== ثبت سفارش در بله ==========
 function sendToBale(){
-    if(cart.length === 0){ showToast('⚠️ سبد خرید خالی است'); return; }
-    const total = cart.reduce((s,c) => s + c.price*c.qty, 0);
-    const items = cart.map(c => `${c.name} (×${c.qty}) - ${(c.price*c.qty).toLocaleString()} تومان`).join('\n');
-    const tracking = generateTrackingCode();
-    const baleId = supportData.bale || '@mory_stock';
-    const message = encodeURIComponent(
-        `🛒 سفارش جدید از موری استوک\n\n` +
-        `📋 محصولات:\n${items}\n\n` +
-        `💰 جمع کل: ${total.toLocaleString()} تومان\n` +
-        `🎫 کد پیگیری: ${tracking}\n\n` +
-        `👤 نام: \n📞 موبایل: \n📍 آدرس: \n\n🙏 سپاس از انتخاب شما`
-    );
-    window.open(`https://bale.ai/${baleId}?text=${message}`, '_blank');
-    showToast('📱 در حال انتقال به بله...');
+if(cart.length === 0){ showToast('⚠️ سبد خرید خالی است'); return; }
+const total = cart.reduce((s,c) => s + c.price*c.qty, 0);
+const items = cart.map(c => `${c.name} (×${c.qty}) - ${(c.price*c.qty).toLocaleString()} تومان`).join('\n');
+const tracking = generateTrackingCode();
+const baleId = supportData.bale || '@mory_stock';
+const message = encodeURIComponent(
+`🛒 سفارش جدید از موری استوک\n\n` +
+`📋 محصولات:\n${items}\n\n` +
+`💰 جمع کل: ${total.toLocaleString()} تومان\n` +
+`🎫 کد پیگیری: ${tracking}\n\n` +
+`👤 نام: \n📞 موبایل: \n📍 آدرس: \n\n🙏 سپاس از انتخاب شما`
+);
+window.open(`https://bale.ai/${baleId}?text=${message}`, '_blank');
+showToast('📱 در حال انتقال به بله...');
 }
 
 // ========== کد پیگیری ==========
 function generateTrackingCode(){
-    const now = new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth()+1).padStart(2,'0');
-    const d = String(now.getDate()).padStart(2,'0');
-    const rand = String(Math.floor(Math.random()*1000)).padStart(3,'0');
-    return `LCI-${y}${m}${d}-${rand}`;
+const now = new Date();
+const y = now.getFullYear();
+const m = String(now.getMonth()+1).padStart(2,'0');
+const d = String(now.getDate()).padStart(2,'0');
+const rand = String(Math.floor(Math.random()*1000)).padStart(3,'0');
+return `LCI-${y}${m}${d}-${rand}`;
 }
 
-// ========== مدیریت محصولات (پنل) ==========
-function addProductLocal(){
-    const name = document.getElementById('prod-name').value.trim();
-    const price = parseInt(document.getElementById('prod-price').value);
-    const image = document.getElementById('prod-image').value.trim();
-    const desc = document.getElementById('prod-desc').value.trim();
-    const freeShipping = document.getElementById('prod-free').value === 'yes';
-    if(!name || !price){ showToast('⚠️ نام و قیمت را وارد کنید'); return; }
-    if(!image){ showToast('⚠️ لینک تصویر را وارد کنید'); return; }
+// ========== افزودن محصول به Supabase ==========
+async function addProduct(){
+const name = document.getElementById('prod-name').value.trim();
+const price = parseInt(document.getElementById('prod-price').value);
+const image = document.getElementById('prod-image').value.trim();
+const desc = document.getElementById('prod-desc').value.trim();
+const freeShipping = document.getElementById('prod-free').value === 'yes';
+if(!name || !price){ showToast('⚠️ نام و قیمت را وارد کنید'); return; }
+if(!image){ showToast('⚠️ لینک تصویر را وارد کنید'); return; }
 
-    const newProduct = {id: nextProductId++, name, price, image, desc, freeShipping};
-    tempProducts.push(newProduct);
-    products.push(newProduct);
+try{
+const { data, error } = await supabaseClient
+.from('products')
+.insert([{
+name: name,
+price: price,
+image: image,
+description: desc,
+free_shipping: freeShipping
+}])
+.select();
 
-    // ذخیره در localStorage (فقط روی همین دستگاه)
-    localStorage.setItem('mory_temp_products', JSON.stringify(tempProducts));
+if(error) throw error;
 
-    // پاک کردن فرم
-    document.getElementById('prod-name').value = '';
-    document.getElementById('prod-price').value = '';
-    document.getElementById('prod-image').value = '';
-    document.getElementById('prod-desc').value = '';
-    document.getElementById('image-preview').innerHTML = '';
+showToast('✅ محصول با موفقیت به دیتابیس اضافه شد');
 
-    renderAdminProducts();
-    renderAllProducts();
-    showToast('✅ محصول به لیست موقت اضافه شد (فقط روی این گوشی)');
+document.getElementById('prod-name').value = '';
+document.getElementById('prod-price').value = '';
+document.getElementById('prod-image').value = '';
+document.getElementById('prod-desc').value = '';
+document.getElementById('image-preview').innerHTML = '';
+
+await loadProducts();
+}catch(error){
+console.error('خطا:', error);
+showToast('❌ خطا در افزودن محصول: ' + error.message);
+}
 }
 
-function showJsonForGithub(){
-    // ترکیب محصولات اصلی + موقت برای نمایش JSON
-    const allProducts = products.map(p => ({
-        id: p.id,
-        name: p.name,
-        price: p.price,
-        image: p.image,
-        desc: p.desc || '',
-        freeShipping: p.freeShipping || false
-    }));
+// ========== حذف محصول از Supabase ==========
+async function deleteProduct(id){
+if(!confirm('حذف محصول؟')) return;
+try{
+const { error } = await supabaseClient
+.from('products')
+.delete()
+.eq('id', id);
 
-    const jsonStr = JSON.stringify(allProducts, null, 2);
-    const outputDiv = document.getElementById('json-output');
+if(error) throw error;
 
-    outputDiv.innerHTML = `
-<div style="background:#f8f9fa;padding:15px;border-radius:8px;border:2px solid #3498db">
-<h4 style="margin-bottom:10px;color:#1a2332">📋 کد JSON (کپی کن و توی فایل products.json گیت‌هاب بذار):</h4>
-<textarea id="json-textarea" style="width:100%;height:200px;font-family:monospace;font-size:12px;direction:ltr;padding:10px;border:1px solid #ddd;border-radius:5px" readonly>${jsonStr}</textarea>
-<button class="btn btn-green" style="margin-top:10px" onclick="copyJsonToClipboard()">📋 کپی به کلیپ‌بورد</button>
-<button class="btn btn-blue" style="margin-top:10px" onclick="clearTempProducts()">🗑️ حذف محصولات موقت</button>
-<div style="margin-top:15px;padding:12px;background:#fff3cd;border-radius:5px;font-size:13px">
-<strong>📌 راهنما:</strong><br>
-۱. کد بالا رو کپی کن<br>
-۲. برو به گیت‌هاب > ریپازیتوری‌ات > فایل <code>products.json</code><br>
-۳. دکمه Edit (✏️) رو بزن<br>
-۴. کد قبلی رو پاک کن و این کد رو بچسبون<br>
-۵. Commit changes رو بزن<br>
-۶. بعد از ۱-۲ دقیقه، محصول توی همه گوشی‌ها دیده میشه ✅
-</div>
-</div>
-`;
+showToast('✅ محصول حذف شد');
+await loadProducts();
+}catch(error){
+console.error('خطا:', error);
+showToast('❌ خطا در حذف: ' + error.message);
 }
-
-function copyJsonToClipboard(){
-    const textarea = document.getElementById('json-textarea');
-    textarea.select();
-    document.execCommand('copy');
-    showToast('📋 کد JSON کپی شد!');
-}
-
-function clearTempProducts(){
-    if(!confirm('آیا محصولات موقت پاک شوند؟ (محصولات اصلی از JSON باقی میمونن)')) return;
-    tempProducts = [];
-    localStorage.removeItem('mory_temp_products');
-    loadProductsFromJSON();
-    showToast('🗑️ محصولات موقت پاک شد');
-}
-
-function deleteProduct(id){
-    if(!confirm('حذف محصول؟')) return;
-
-    // چک کن آیا محصول موقته
-    const isTemp = tempProducts.some(p => p.id === id);
-    if(isTemp){
-        tempProducts = tempProducts.filter(p => p.id !== id);
-        localStorage.setItem('mory_temp_products', JSON.stringify(tempProducts));
-    }else{
-        showToast('⚠️ این محصول از products.json میاد. برای حذف، فایل JSON رو ویرایش کن');
-        return;
-    }
-
-    products = products.filter(p => p.id !== id);
-    renderAdminProducts();
-    renderAllProducts();
-    showToast('✅ محصول حذف شد');
 }
 
 function renderAdminProducts(){
-    const container = document.getElementById('admin-product-list');
-    if(products.length === 0){
-        container.innerHTML = '<div class="empty-msg">محصولی وجود ندارد</div>';
-        return;
-    }
-    container.innerHTML = products.map(p => {
-        const isTemp = tempProducts.some(t => t.id === p.id);
-        return `
+const container = document.getElementById('admin-product-list');
+if(products.length === 0){
+container.innerHTML = '<div class="empty-msg">محصولی وجود ندارد</div>';
+return;
+}
+container.innerHTML = products.map(p => `
 <div class="list-item">
 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
 <img src="${p.image}" style="width:50px;height:50px;object-fit:cover;border-radius:6px" onerror="this.src='https://via.placeholder.com/50/ccc/fff?text=?'">
 <div><strong>${p.name}</strong> - ${p.price.toLocaleString()} تومان</div>
 ${p.freeShipping ? '<span style="background:#f1c40f;padding:2px 10px;border-radius:12px;font-size:11px">🚚 رایگان</span>' : ''}
-${isTemp ? '<span style="background:#e74c3c;color:#fff;padding:2px 10px;border-radius:12px;font-size:11px">موقت</span>' : '<span style="background:#27ae60;color:#fff;padding:2px 10px;border-radius:12px;font-size:11px">از JSON</span>'}
 </div>
 <span><span style="color:#888;font-size:13px">${p.desc||''}</span> <span class="del" onclick="deleteProduct(${p.id})">✖</span></span>
 </div>
-`;
-    }).join('');
+`).join('');
 }
 
 // ========== ثبت سفارش دستی ==========
 function addManualOrder(){
-    const customer = document.getElementById('order-customer').value.trim();
-    const phone = document.getElementById('order-phone').value.trim();
-    const address = document.getElementById('order-address').value.trim();
-    const itemsRaw = document.getElementById('order-items').value.trim();
-    if(!customer || !itemsRaw){ showToast('⚠️ نام مشتری و محصولات را وارد کنید'); return; }
-    const itemsArr = itemsRaw.split(',').map(s => s.trim()).filter(s => s);
-    if(itemsArr.length === 0){ showToast('⚠️ حداقل یک محصول وارد کنید'); return; }
-    const orderItems = itemsArr.map((item, idx) => {
-        const parts = item.split('-');
-        const name = parts[0]?.trim() || 'محصول' + idx;
-        const price = parseInt(parts[1]?.trim()) || 0;
-        return {id: Date.now() + idx, name, price, qty: 1};
-    });
-    const total = orderItems.reduce((s,c) => s + c.price*c.qty, 0);
-    const tracking = generateTrackingCode();
-    const order = {
-        id: nextOrderId++,
-        tracking: tracking,
-        items: orderItems,
-        total: total,
-        date: new Date().toLocaleDateString('fa-IR'),
-        status: 'در انتظار پردازش',
-        customer: customer,
-        phone: phone || 'نامشخص',
-        address: address || 'نامشخص'
-    };
-    orders.push(order);
-    document.getElementById('order-customer').value = '';
-    document.getElementById('order-phone').value = '';
-    document.getElementById('order-address').value = '';
-    document.getElementById('order-items').value = '';
-    renderOrdersList();
-    saveOrders();
-    showToast('✅ سفارش با کد ' + tracking + ' ثبت شد');
+const customer = document.getElementById('order-customer').value.trim();
+const phone = document.getElementById('order-phone').value.trim();
+const address = document.getElementById('order-address').value.trim();
+const itemsRaw = document.getElementById('order-items').value.trim();
+if(!customer || !itemsRaw){ showToast('⚠️ نام مشتری و محصولات را وارد کنید'); return; }
+const itemsArr = itemsRaw.split(',').map(s => s.trim()).filter(s => s);
+if(itemsArr.length === 0){ showToast('⚠️ حداقل یک محصول وارد کنید'); return; }
+const orderItems = itemsArr.map((item, idx) => {
+const parts = item.split('-');
+const name = parts[0]?.trim() || 'محصول' + idx;
+const price = parseInt(parts[1]?.trim()) || 0;
+return {id: Date.now() + idx, name, price, qty: 1};
+});
+const total = orderItems.reduce((s,c) => s + c.price*c.qty, 0);
+const tracking = generateTrackingCode();
+const order = {
+id: nextOrderId++,
+tracking: tracking,
+items: orderItems,
+total: total,
+date: new Date().toLocaleDateString('fa-IR'),
+status: 'در انتظار پردازش',
+customer: customer,
+phone: phone || 'نامشخص',
+address: address || 'نامشخص'
+};
+orders.push(order);
+document.getElementById('order-customer').value = '';
+document.getElementById('order-phone').value = '';
+document.getElementById('order-address').value = '';
+document.getElementById('order-items').value = '';
+renderOrdersList();
+saveOrders();
+showToast('✅ سفارش با کد ' + tracking + ' ثبت شد');
 }
 
 function renderOrdersList(){
-    const container = document.getElementById('all-orders-list');
-    if(orders.length === 0){
-        container.innerHTML = '<div class="empty-msg">هیچ سفارشی ثبت نشده</div>';
-        return;
-    }
-    container.innerHTML = orders.slice().reverse().map(o => `
+const container = document.getElementById('all-orders-list');
+if(orders.length === 0){
+container.innerHTML = '<div class="empty-msg">هیچ سفارشی ثبت نشده</div>';
+return;
+}
+container.innerHTML = orders.slice().reverse().map(o => `
 <div class="order-item">
 <div>
 <span class="order-code">${o.tracking}</span>
@@ -670,98 +611,98 @@ function renderOrdersList(){
 }
 
 function toggleOrderStatus(tracking){
-    const order = orders.find(o => o.tracking === tracking);
-    if(!order) return;
-    order.status = order.status === 'در انتظار پردازش' ? 'انجام شده' : 'در انتظار پردازش';
-    renderOrdersList();
-    saveOrders();
+const order = orders.find(o => o.tracking === tracking);
+if(!order) return;
+order.status = order.status === 'در انتظار پردازش' ? 'انجام شده' : 'در انتظار پردازش';
+renderOrdersList();
+saveOrders();
 }
 
 function deleteOrder(tracking){
-    if(!confirm('حذف سفارش؟')) return;
-    orders = orders.filter(o => o.tracking !== tracking);
-    renderOrdersList();
-    saveOrders();
+if(!confirm('حذف سفارش؟')) return;
+orders = orders.filter(o => o.tracking !== tracking);
+renderOrdersList();
+saveOrders();
 }
 
 // ========== پشتیبانی ==========
 function saveSupport(){
-    const whatsapp = document.getElementById('support-whatsapp').value.trim();
-    const bale = document.getElementById('support-bale').value.trim();
-    const phone = document.getElementById('support-phone').value.trim();
-    const hours = document.getElementById('support-hours').value.trim();
-    if(whatsapp) supportData.whatsapp = whatsapp;
-    if(bale) supportData.bale = bale;
-    if(phone) supportData.phone = phone;
-    if(hours) supportData.hours = hours;
-    renderSupportInfo();
-    saveSupportData();
-    showToast('✅ اطلاعات پشتیبانی ذخیره شد');
+const whatsapp = document.getElementById('support-whatsapp').value.trim();
+const bale = document.getElementById('support-bale').value.trim();
+const phone = document.getElementById('support-phone').value.trim();
+const hours = document.getElementById('support-hours').value.trim();
+if(whatsapp) supportData.whatsapp = whatsapp;
+if(bale) supportData.bale = bale;
+if(phone) supportData.phone = phone;
+if(hours) supportData.hours = hours;
+renderSupportInfo();
+saveSupportData();
+showToast('✅ اطلاعات پشتیبانی ذخیره شد');
 }
 
 function renderSupportInfo(){
-    const div = document.getElementById('support-info');
-    div.innerHTML = `
+const div = document.getElementById('support-info');
+div.innerHTML = `
 <p>📱 واتساپ: ${supportData.whatsapp||'تنظیم نشده'}</p>
 <p>💬 بله: ${supportData.bale||'تنظیم نشده'}</p>
 <p>📞 تلفن: ${supportData.phone||'تنظیم نشده'}</p>
 <p>🕐 ساعات پاسخگویی: ${supportData.hours||'تنظیم نشده'}</p>
 `;
-    document.getElementById('support-whatsapp').value = supportData.whatsapp||'';
-    document.getElementById('support-bale').value = supportData.bale||'';
-    document.getElementById('support-phone').value = supportData.phone||'';
-    document.getElementById('support-hours').value = supportData.hours||'';
+document.getElementById('support-whatsapp').value = supportData.whatsapp||'';
+document.getElementById('support-bale').value = supportData.bale||'';
+document.getElementById('support-phone').value = supportData.phone||'';
+document.getElementById('support-hours').value = supportData.hours||'';
 }
 
 // ========== توضیحات سایت ==========
 function saveSiteInfo(){
-    const desc = document.getElementById('site-description').value.trim();
-    const rules = document.getElementById('site-rules').value.trim();
-    if(desc) siteInfo.description = desc;
-    if(rules) siteInfo.rules = rules;
-    renderSiteInfo();
-    saveSiteInfoData();
-    showToast('✅ توضیحات سایت ذخیره شد');
+const desc = document.getElementById('site-description').value.trim();
+const rules = document.getElementById('site-rules').value.trim();
+if(desc) siteInfo.description = desc;
+if(rules) siteInfo.rules = rules;
+renderSiteInfo();
+saveSiteInfoData();
+showToast('✅ توضیحات سایت ذخیره شد');
 }
 
 function renderSiteInfo(){
-    const div = document.getElementById('site-info-display');
-    div.innerHTML = `
+const div = document.getElementById('site-info-display');
+div.innerHTML = `
 <p><strong>📝 درباره فروشگاه:</strong></p>
 <p>${siteInfo.description||'تنظیم نشده'}</p>
 <p style="margin-top:10px"><strong>📋 قوانین:</strong></p>
 <p style="white-space:pre-wrap">${siteInfo.rules||'تنظیم نشده'}</p>
 `;
-    document.getElementById('site-description').value = siteInfo.description||'';
-    document.getElementById('site-rules').value = siteInfo.rules||'';
+document.getElementById('site-description').value = siteInfo.description||'';
+document.getElementById('site-rules').value = siteInfo.rules||'';
 }
 
 // ========== تنظیمات سایت ==========
 function saveSettings(){
-    const s1 = document.getElementById('slide-text1').value.trim();
-    const s2 = document.getElementById('slide-text2').value.trim();
-    const s3 = document.getElementById('slide-text3').value.trim();
-    const shop = document.getElementById('shop-name').value.trim();
-    if(s1) settings.slide1 = s1;
-    if(s2) settings.slide2 = s2;
-    if(s3) settings.slide3 = s3;
-    if(shop){ settings.shopName = shop; document.querySelector('header h1 span').textContent = shop; }
-    const slides = document.querySelectorAll('.slide');
-    if(slides.length >= 3){
-        slides[0].querySelector('h2').textContent = settings.slide1;
-        slides[1].querySelector('h2').textContent = settings.slide2;
-        slides[2].querySelector('h2').textContent = settings.slide3;
-    }
-    showToast('✅ تنظیمات ذخیره شد');
-    saveSettingsData();
+const s1 = document.getElementById('slide-text1').value.trim();
+const s2 = document.getElementById('slide-text2').value.trim();
+const s3 = document.getElementById('slide-text3').value.trim();
+const shop = document.getElementById('shop-name').value.trim();
+if(s1) settings.slide1 = s1;
+if(s2) settings.slide2 = s2;
+if(s3) settings.slide3 = s3;
+if(shop){ settings.shopName = shop; document.querySelector('header h1 span').textContent = shop; }
+const slides = document.querySelectorAll('.slide');
+if(slides.length >= 3){
+slides[0].querySelector('h2').textContent = settings.slide1;
+slides[1].querySelector('h2').textContent = settings.slide2;
+slides[2].querySelector('h2').textContent = settings.slide3;
+}
+showToast('✅ تنظیمات ذخیره شد');
+saveSettingsData();
 }
 
 // ========== مدیریت تب‌های پنل ==========
 function adminTab(tab){
-    document.querySelectorAll('.admin-content').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.admin-tabs button').forEach(el => el.classList.remove('active'));
-    document.getElementById('admin-'+tab).classList.add('active');
-    document.querySelector(`.admin-tabs button[onclick*="${tab}"]`).classList.add('active');
+document.querySelectorAll('.admin-content').forEach(el => el.classList.remove('active'));
+document.querySelectorAll('.admin-tabs button').forEach(el => el.classList.remove('active'));
+document.getElementById('admin-'+tab).classList.add('active');
+document.querySelector(`.admin-tabs button[onclick*="${tab}"]`).classList.add('active');
 }
 
 // ========== ذخیره در localStorage ==========
@@ -771,44 +712,43 @@ function saveSettingsData(){ localStorage.setItem('mory_settings', JSON.stringif
 function saveSiteInfoData(){ localStorage.setItem('mory_siteinfo', JSON.stringify(siteInfo)); }
 
 function loadLocalData(){
-    const o = localStorage.getItem('mory_orders');
-    if(o){ orders = JSON.parse(o); nextOrderId = Math.max(...orders.map(x => x.id), 0) + 1; }
-    const s = localStorage.getItem('mory_support');
-    if(s){ supportData = JSON.parse(s); }
-    const st = localStorage.getItem('mory_settings');
-    if(st){ settings = JSON.parse(st); }
-    const si = localStorage.getItem('mory_siteinfo');
-    if(si){ siteInfo = JSON.parse(si); }
+const o = localStorage.getItem('mory_orders');
+if(o){ orders = JSON.parse(o); nextOrderId = Math.max(...orders.map(x => x.id), 0) + 1; }
+const s = localStorage.getItem('mory_support');
+if(s){ supportData = JSON.parse(s); }
+const st = localStorage.getItem('mory_settings');
+if(st){ settings = JSON.parse(st); }
+const si = localStorage.getItem('mory_siteinfo');
+if(si){ siteInfo = JSON.parse(si); }
 }
 
 // ========== توست ==========
 function showToast(msg){
-    const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.classList.add('show');
-    clearTimeout(t._timer);
-    t._timer = setTimeout(() => t.classList.remove('show'), 3000);
+const t = document.getElementById('toast');
+t.textContent = msg;
+t.classList.add('show');
+clearTimeout(t._timer);
+t._timer = setTimeout(() => t.classList.remove('show'), 3000);
 }
 
 // ========== مقداردهی اولیه ==========
 async function init(){
-    loadLocalData();
-    await loadProductsFromJSON();
-    updateCartCount();
-    renderSupportInfo();
-    renderSiteInfo();
-    const slides = document.querySelectorAll('.slide');
-    if(slides.length >= 3){
-        slides[0].querySelector('h2').textContent = settings.slide1;
-        slides[1].querySelector('h2').textContent = settings.slide2;
-        slides[2].querySelector('h2').textContent = settings.slide3;
-    }
-    document.querySelector('header h1 span').textContent = settings.shopName || 'موری استوک';
-    document.getElementById('slide-text1').value = settings.slide1;
-    document.getElementById('slide-text2').value = settings.slide2;
-    document.getElementById('slide-text3').value = settings.slide3;
-    document.getElementById('shop-name').value = settings.shopName || 'موری استوک';
-    showToast('🟢 فروشگاه موری استوک آماده کار است');
+loadLocalData();
+await loadProducts();
+updateCartCount();
+renderSupportInfo();
+renderSiteInfo();
+const slides = document.querySelectorAll('.slide');
+if(slides.length >= 3){
+slides[0].querySelector('h2').textContent = settings.slide1;
+slides[1].querySelector('h2').textContent = settings.slide2;
+slides[2].querySelector('h2').textContent = settings.slide3;
+}
+document.querySelector('header h1 span').textContent = settings.shopName || 'موری استوک';
+document.getElementById('slide-text1').value = settings.slide1;
+document.getElementById('slide-text2').value = settings.slide2;
+document.getElementById('slide-text3').value = settings.slide3;
+document.getElementById('shop-name').value = settings.shopName || 'موری استوک';
 }
 init();
 </script>
